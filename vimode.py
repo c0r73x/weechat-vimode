@@ -19,20 +19,18 @@
 #
 # Add vi/vim-like modes to WeeChat.
 #
-
-
-import csv
 import os
 import re
+import csv
+import time
 import subprocess
+
+import weechat
+
 try:
     from StringIO import StringIO
 except ImportError:
     from io import StringIO
-import time
-
-import weechat
-
 
 # Script info.
 # ============
@@ -75,6 +73,11 @@ last_search_motion = {'motion': None, 'data': None}
 vimode_settings = {'no_warn': ("off", "don't warn about problematic"
                                "keybindings and tmux/screen")}
 
+mode_colors = {
+    "INSERT": weechat.color('cyan'),
+    "NORMAL": weechat.color('white'),
+    "REPLACE": weechat.color('red')
+}
 
 # Regex patterns.
 # ---------------
@@ -175,6 +178,7 @@ def operator_base(buf, input_line, pos1, pos2, overwrite):
     # Print the text the operator should go over.
     weechat.prnt("", "Selection: %s" % input_line[start:end])
 
+
 def motion_base(input_line, cur, count):
     """Motion method example.
 
@@ -204,6 +208,7 @@ def motion_base(input_line, cur, count):
     # Return the new (absolute) cursor position.
     # This motion is exclusive, so overwrite is False.
     return cur + pos, False
+
 
 def key_base(buf, input_line, cur, count):
     """Key method example.
@@ -249,6 +254,7 @@ def operator_d(buf, input_line, pos1, pos2, overwrite=False):
     weechat.buffer_set(buf, "input", input_line)
     set_cur(buf, input_line, pos1)
 
+
 def operator_c(buf, input_line, pos1, pos2, overwrite=False):
     """Delete text from `pos1` to `pos2` from the input and enter Insert mode.
 
@@ -260,6 +266,7 @@ def operator_c(buf, input_line, pos1, pos2, overwrite=False):
     """
     operator_d(buf, input_line, pos1, pos2, overwrite)
     set_mode("INSERT")
+
 
 def operator_y(buf, input_line, pos1, pos2, _):
     """Yank text from `pos1` to `pos2` from the input line.
@@ -285,6 +292,7 @@ def motion_0(input_line, cur, count):
     """
     return 0, False, False
 
+
 def motion_w(input_line, cur, count):
     """Go `count` words forward and return position.
 
@@ -296,6 +304,7 @@ def motion_w(input_line, cur, count):
         return len(input_line), False, False
     return cur + pos, False, False
 
+
 def motion_W(input_line, cur, count):
     """Go `count` WORDS forward and return position.
 
@@ -306,6 +315,7 @@ def motion_W(input_line, cur, count):
     if pos == -1:
         return len(input_line), False, False
     return cur + pos, False, False
+
 
 def motion_e(input_line, cur, count):
     """Go to the end of `count` words and return position.
@@ -337,6 +347,7 @@ def motion_e(input_line, cur, count):
             cur = pos + 1
     return cur, True, False
 
+
 def motion_E(input_line, cur, count):
     """Go to the end of `count` WORDS and return cusor position.
 
@@ -348,6 +359,7 @@ def motion_E(input_line, cur, count):
         return len(input_line), False, False
     return cur + pos, True, False
 
+
 def motion_b(input_line, cur, count):
     """Go `count` words backwards and return position.
 
@@ -358,6 +370,7 @@ def motion_b(input_line, cur, count):
     pos_inv = motion_e(input_line[::-1], len(input_line) - cur - 1, count)[0]
     pos = len(input_line) - pos_inv - 1
     return pos, True, False
+
 
 def motion_B(input_line, cur, count):
     """Go `count` WORDS backwards and return position.
@@ -373,6 +386,7 @@ def motion_B(input_line, cur, count):
     pos = len(input_line) - (pos + new_cur + 1)
     return pos, True, False
 
+
 def motion_ge(input_line, cur, count):
     """Go to end of `count` words backwards and return position.
 
@@ -383,6 +397,7 @@ def motion_ge(input_line, cur, count):
     pos_inv = motion_w(input_line[::-1], len(input_line) - cur - 1, count)[0]
     pos = len(input_line) - pos_inv - 1
     return pos, True, False
+
 
 def motion_gE(input_line, cur, count):
     """Go to end of `count` WORDS backwards and return position.
@@ -398,6 +413,7 @@ def motion_gE(input_line, cur, count):
     pos = len(input_line) - (pos + new_cur + 1)
     return pos, True, False
 
+
 def motion_h(input_line, cur, count):
     """Go `count` characters to the left and return position.
 
@@ -406,6 +422,7 @@ def motion_h(input_line, cur, count):
     """
     return max(0, cur - max(count, 1)), False, False
 
+
 def motion_l(input_line, cur, count):
     """Go `count` characters to the right and return position.
 
@@ -413,6 +430,7 @@ def motion_l(input_line, cur, count):
         `motion_base()`.
     """
     return cur + max(count, 1), False, False
+
 
 def motion_carret(input_line, cur, count):
     """Go to first non-blank character of line and return position.
@@ -423,6 +441,7 @@ def motion_carret(input_line, cur, count):
     pos = get_pos(input_line, REGEX_MOTION_CARRET, 0)
     return pos, False, False
 
+
 def motion_dollar(input_line, cur, count):
     """Go to end of line and return position.
 
@@ -432,6 +451,7 @@ def motion_dollar(input_line, cur, count):
     pos = len(input_line)
     return pos, False, False
 
+
 def motion_f(input_line, cur, count):
     """Go to `count`'th occurence of character and return position.
 
@@ -439,6 +459,7 @@ def motion_f(input_line, cur, count):
         `motion_base()`.
     """
     return start_catching_keys(1, "cb_motion_f", input_line, cur, count)
+
 
 def cb_motion_f(update_last=True):
     """Callback for `motion_f()`.
@@ -462,6 +483,7 @@ def cb_motion_f(update_last=True):
         last_search_motion = {'motion': "f", 'data': pattern}
     cb_key_combo_default(None, None, "")
 
+
 def motion_F(input_line, cur, count):
     """Go to `count`'th occurence of char to the right and return position.
 
@@ -469,6 +491,7 @@ def motion_F(input_line, cur, count):
         `motion_base()`.
     """
     return start_catching_keys(1, "cb_motion_F", input_line, cur, count)
+
 
 def cb_motion_F(update_last=True):
     """Callback for `motion_F()`.
@@ -495,6 +518,7 @@ def cb_motion_F(update_last=True):
         last_search_motion = {'motion': "F", 'data': pattern}
     cb_key_combo_default(None, None, "")
 
+
 def motion_t(input_line, cur, count):
     """Go to `count`'th occurence of char and return position.
 
@@ -504,6 +528,7 @@ def motion_t(input_line, cur, count):
         `motion_base()`.
     """
     return start_catching_keys(1, "cb_motion_t", input_line, cur, count)
+
 
 def cb_motion_t(update_last=True):
     """Callback for `motion_t()`.
@@ -531,6 +556,7 @@ def cb_motion_t(update_last=True):
         last_search_motion = {'motion': "t", 'data': pattern}
     cb_key_combo_default(None, None, "")
 
+
 def motion_T(input_line, cur, count):
     """Go to `count`'th occurence of char to the left and return position.
 
@@ -541,6 +567,7 @@ def motion_T(input_line, cur, count):
         `motion_base()`.
     """
     return start_catching_keys(1, "cb_motion_T", input_line, cur, count)
+
 
 def cb_motion_T(update_last=True):
     """Callback for `motion_T()`.
@@ -582,6 +609,7 @@ def key_cc(buf, input_line, cur, count):
     weechat.command("", "/input delete_line")
     set_mode("INSERT")
 
+
 def key_C(buf, input_line, cur, count):
     """Delete from cursor to end of line and start Insert mode.
 
@@ -590,6 +618,7 @@ def key_C(buf, input_line, cur, count):
     """
     weechat.command("", "/input delete_end_of_line")
     set_mode("INSERT")
+
 
 def key_yy(buf, input_line, cur, count):
     """Yank line.
@@ -601,6 +630,7 @@ def key_yy(buf, input_line, cur, count):
                             stdin=subprocess.PIPE)
     proc.communicate(input=input_line)
 
+
 def key_i(buf, input_line, cur, count):
     """Start Insert mode.
 
@@ -608,6 +638,7 @@ def key_i(buf, input_line, cur, count):
         `key_base()`.
     """
     set_mode("INSERT")
+
 
 def key_a(buf, input_line, cur, count):
     """Move cursor one character to the right and start Insert mode.
@@ -618,6 +649,7 @@ def key_a(buf, input_line, cur, count):
     set_cur(buf, input_line, cur + 1, False)
     set_mode("INSERT")
 
+
 def key_A(buf, input_line, cur, count):
     """Move cursor to end of line and start Insert mode.
 
@@ -626,6 +658,7 @@ def key_A(buf, input_line, cur, count):
     """
     set_cur(buf, input_line, len(input_line), False)
     set_mode("INSERT")
+
 
 def key_I(buf, input_line, cur, count):
     """Move cursor to first non-blank character and start Insert mode.
@@ -636,6 +669,7 @@ def key_I(buf, input_line, cur, count):
     pos, _, _ = motion_carret(input_line, cur, 0)
     set_cur(buf, input_line, pos)
     set_mode("INSERT")
+
 
 def key_G(buf, input_line, cur, count):
     """Scroll to specified line or bottom of buffer.
@@ -650,6 +684,7 @@ def key_G(buf, input_line, cur, count):
     else:
         weechat.command("", "/window scroll_bottom")
 
+
 def key_r(buf, input_line, cur, count):
     """Replace `count` characters under the cursor.
 
@@ -657,6 +692,7 @@ def key_r(buf, input_line, cur, count):
         `key_base()`.
     """
     start_catching_keys(1, "cb_key_r", input_line, cur, count, buf)
+
 
 def cb_key_r():
     """Callback for `key_r()`.
@@ -677,6 +713,7 @@ def cb_key_r():
         set_cur(catching_keys_data['buf'], input_line, cur - 1)
     catching_keys_data = {'amount': 0}
 
+
 def key_R(buf, input_line, cur, count):
     """Start Replace mode.
 
@@ -684,6 +721,7 @@ def key_R(buf, input_line, cur, count):
         `key_base()`.
     """
     set_mode("REPLACE")
+
 
 def key_tilda(buf, input_line, cur, count):
     """Switch the case of `count` characters under the cursor.
@@ -701,6 +739,7 @@ def key_tilda(buf, input_line, cur, count):
     weechat.buffer_set(buf, "input", input_line)
     set_cur(buf, input_line, cur)
 
+
 def key_alt_j(buf, input_line, cur, count):
     """Go to WeeChat buffer.
 
@@ -714,6 +753,7 @@ def key_alt_j(buf, input_line, cur, count):
     """
     start_catching_keys(2, "cb_key_alt_j", input_line, cur, count)
 
+
 def cb_key_alt_j():
     """Callback for `key_alt_j()`.
 
@@ -723,6 +763,7 @@ def cb_key_alt_j():
     global catching_keys_data
     weechat.command("", "/buffer " + catching_keys_data['keys'])
     catching_keys_data = {'amount': 0}
+
 
 def key_semicolon(buf, input_line, cur, count, swap=False):
     """Repeat last f, t, F, T `count` times.
@@ -750,6 +791,7 @@ def key_semicolon(buf, input_line, cur, count, swap=False):
     func = "cb_motion_%s" % motion
     vi_buffer = motion
     globals()[func](False)
+
 
 def key_comma(buf, input_line, cur, count):
     """Repeat last f, t, F, T in opposite direction `count` times.
@@ -853,6 +895,7 @@ def cb_key_pressed(data, signal, signal_data):
                            "{:f}".format(last_signal_time))
     return weechat.WEECHAT_RC_OK
 
+
 def cb_check_esc(data, remaining_calls):
     """Check if the Esc key was pressed and change the mode accordingly."""
     global esc_pressed, vi_buffer, cmd_text, catching_keys_data
@@ -866,6 +909,7 @@ def cb_check_esc(data, remaining_calls):
         catching_keys_data = {'amount': 0}
         weechat.bar_item_update("vi_buffer")
     return weechat.WEECHAT_RC_OK
+
 
 def cb_key_combo_default(data, signal, signal_data):
     """Eat and handle key events when in Normal mode, if needed.
@@ -1041,13 +1085,21 @@ def cb_vi_buffer(data, item, window):
     """Return the content of the vi buffer (pressed keys on hold)."""
     return vi_buffer
 
+
 def cb_cmd_text(data, item, window):
     """Return the text of the command line."""
     return cmd_text
 
+
 def cb_mode_indicator(data, item, window):
     """Return the current mode (INSERT/NORMAL/REPLACE)."""
     return mode
+
+
+def cb_mode_color(data, item, window):
+    """Return the current mode in colorvalues."""
+    return mode_colors[mode] + "■" + weechat.color('reset')
+
 
 def cb_line_numbers(data, item, window):
     """Fill the line numbers bar item."""
@@ -1060,6 +1112,7 @@ def cb_line_numbers(data, item, window):
 # Callbacks for the line numbers bar.
 # ...................................
 
+
 def cb_update_line_numbers(data, signal, signal_data):
     """Call `cb_timer_update_line_numbers()` when switching buffers.
 
@@ -1069,6 +1122,7 @@ def cb_update_line_numbers(data, signal, signal_data):
     """
     weechat.hook_timer(10, 0, 1, "cb_timer_update_line_numbers", "")
     return weechat.WEECHAT_RC_OK
+
 
 def cb_timer_update_line_numbers(data, remaining_calls):
     """Update the line numbers bar item."""
@@ -1142,13 +1196,14 @@ def cb_exec_cmd(data, remaining_calls):
             # Check for commands not sepearated by space (e.g. "b2")
             for i in range(1, len(raw_data)):
                 tmp_cmd = raw_data[:i]
-                args = raw_data[i:]
-                if tmp_cmd in VI_COMMANDS and args.isdigit():
-                    weechat.command("", "%s %s" % (VI_COMMANDS[tmp_cmd], args))
-                    return weechat.WEECHAT_RC_OK
+                tmp_args = raw_data[i:]
+                if tmp_cmd in VI_COMMANDS and tmp_args.isdigit():
+                    weechat.command("", "%s %s" % (VI_COMMANDS[tmp_cmd],
+                                                   tmp_args))
             # No vi commands found, run the command as WeeChat command
             weechat.command("", "/{} {}".format(cmd, args))
     return weechat.WEECHAT_RC_OK
+
 
 def cb_vimode_go_to_normal(data, buf, args):
     set_mode("NORMAL")
@@ -1156,6 +1211,7 @@ def cb_vimode_go_to_normal(data, buf, args):
 
 # Script commands.
 # ----------------
+
 
 def cb_vimode_cmd(data, buf, args):
     """Handle script commands (``/vimode <command>``)."""
@@ -1234,6 +1290,7 @@ def get_pos(data, regex, cur, ignore_cur=False, count=0):
             pos = matches[0]
     return pos
 
+
 def set_cur(buf, input_line, pos, cap=True):
     """Set the cursor's position.
 
@@ -1247,6 +1304,7 @@ def set_cur(buf, input_line, pos, cap=True):
     if cap:
         pos = min(pos, len(input_line) - 1)
     weechat.buffer_set(buf, "input_pos", str(pos))
+
 
 def start_catching_keys(amount, callback, input_line, cur, count, buf=None):
     """Start catching keys. Used for special commands (e.g. "f", "r").
@@ -1283,6 +1341,7 @@ def start_catching_keys(amount, callback, input_line, cur, count, buf=None):
                            'new_cur': 0,
                            'buf': buf})
     return cur, False, True
+
 
 def get_keys_and_count(combo):
     """Check if `combo` is a valid combo and extract keys/counts if so.
@@ -1371,10 +1430,13 @@ def set_mode(arg):
         cur = weechat.buffer_get_integer(buf, "input_pos")
         set_cur(buf, input_line, cur - 1, False)
     weechat.bar_item_update("mode_indicator")
+    weechat.bar_item_update("mode_color")
+
 
 def print_warning(text):
     """Print warning, in red, to the current buffer."""
     weechat.prnt("", ("%s[vimode.py] %s" % (weechat.color("red"), text)))
+
 
 def check_warnings():
     """Warn the user about problematic key bindings and tmux/screen."""
@@ -1440,6 +1502,7 @@ if __name__ == "__main__":
         check_warnings()
     # Create bar items and setup hooks.
     weechat.bar_item_new("mode_indicator", "cb_mode_indicator", "")
+    weechat.bar_item_new("mode_color", "cb_mode_color", "")
     weechat.bar_item_new("cmd_text", "cb_cmd_text", "")
     weechat.bar_item_new("vi_buffer", "cb_vi_buffer", "")
     weechat.bar_item_new("line_numbers", "cb_line_numbers", "")
@@ -1461,6 +1524,8 @@ if __name__ == "__main__":
                          "          --list: only list changes",
                          "help || bind_keys |--list",
                          "cb_vimode_cmd", "")
-    weechat.hook_command("vimode_go_to_normal", ("This command can be used for"
-                         " key bindings to go to normal mode."), "", "", "",
-                         "cb_vimode_go_to_normal", "")
+    weechat.hook_command("vimode_go_to_normal",
+                         (
+                             "This command can be used for"
+                             " key bindings to go to normal mode."
+                         ), "", "", "", "cb_vimode_go_to_normal", "")
